@@ -1,10 +1,506 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>lukedasd's First Website</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Retro Breakout Game</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+
+        body {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            margin: 0;
+            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+            font-family: 'Press Start 2P', cursive;
+            color: #fff;
+            padding: 20px;
+        }
+
+        h1 {
+            font-size: 1.5rem;
+            text-shadow: 4px 4px 0 #000;
+            margin-bottom: 20px;
+            color: #ffcc00; /* Retro yellow/gold */
+            text-align: center;
+        }
+
+        #gameCanvas {
+            border: 5px solid #ffcc00;
+            box-shadow: 0 0 20px rgba(255, 204, 0, 0.5), inset 0 0 10px rgba(255, 204, 0, 0.7);
+            background: #000000; /* Black for game area */
+            touch-action: none; /* Prevents default touch behavior */
+            display: block;
+            width: 90vw; /* Fluid width */
+            max-width: 480px; /* Max size for classic arcade look */
+            aspect-ratio: 3/2; /* Maintain classic aspect ratio */
+        }
+
+        .controls {
+            display: flex;
+            gap: 20px;
+            margin-top: 20px;
+        }
+
+        .control-button {
+            font-family: 'Press Start 2P', cursive;
+            font-size: 0.8rem;
+            padding: 10px 15px;
+            cursor: pointer;
+            background: #ff0000; /* Retro red */
+            color: white;
+            border: 3px solid #ffcc00;
+            border-radius: 8px;
+            box-shadow: 5px 5px 0 #800000; /* Darker red shadow */
+            transition: all 0.1s;
+            text-transform: uppercase;
+        }
+
+        .control-button:active {
+            box-shadow: 0 0 0 #800000;
+            transform: translate(5px, 5px);
+        }
+
+        .info {
+            margin-top: 15px;
+            font-size: 0.6rem;
+            text-align: center;
+            color: #a0a0a0;
+        }
+
+        .message-box {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.9);
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 100;
+            animation: fadeIn 0.5s;
+        }
+
+        .message-content {
+            background: #1e1e1e;
+            padding: 40px;
+            border: 5px solid #ffcc00;
+            box-shadow: 0 0 25px #ffcc00;
+            text-align: center;
+            border-radius: 10px;
+        }
+
+        .message-content h2 {
+            color: #ff0000;
+            font-size: 1.2rem;
+            margin-bottom: 20px;
+        }
+
+        .message-content p {
+            font-size: 0.8rem;
+            margin-bottom: 30px;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        /* Mobile specific styling for touch controls */
+        #touch-controls {
+            display: none;
+            width: 100%;
+            max-width: 480px;
+            justify-content: space-between;
+            margin-top: 15px;
+        }
+        
+        .touch-button {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 45%;
+            padding: 15px 0;
+            background: #00aaff;
+            color: white;
+            border: 3px solid #005680;
+            border-radius: 8px;
+            box-shadow: 4px 4px 0 #005680;
+            font-size: 1.2rem;
+            cursor: pointer;
+            user-select: none;
+            transition: all 0.1s;
+        }
+
+        .touch-button:active {
+            box-shadow: 0 0 0 #005680;
+            transform: translate(4px, 4px);
+        }
+
+        /* Show touch controls only on smaller screens */
+        @media (max-width: 600px) {
+            #touch-controls {
+                display: flex;
+            }
+            .info {
+                display: none;
+            }
+        }
+    </style>
 </head>
 <body>
-    <h1>Success! My GitHub Pages site is working.</h1>
-    <p>This is the content of my index.html file.</p>
+
+    <h1>RETRO BREAKOUT</h1>
+
+    <canvas id="gameCanvas"></canvas>
+
+    <div class="controls">
+        <button id="startButton" class="control-button">Start Game</button>
+        <button id="resetButton" class="control-button" disabled>Reset</button>
+    </div>
+    
+    <div id="touch-controls">
+        <button id="leftButton" class="touch-button">◀</button>
+        <button id="rightButton" class="touch-button">▶</button>
+    </div>
+
+    <p class="info">Use Left/Right Arrow Keys to control the paddle.</p>
+
+    <!-- Custom Message Box for Game Over/Win -->
+    <div id="messageBox" class="message-box">
+        <div class="message-content">
+            <h2 id="messageTitle"></h2>
+            <p id="messageText"></p>
+            <button id="messageButton" class="control-button">Play Again</button>
+        </div>
+    </div>
+
+    <script>
+        // --- Firebase/Firestore (Not used for this single-player game, but required block structure) ---
+        // We will not use Firestore for this simple, single-player game, but will keep the required structure.
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+        // --------------------------------------------------------------------------------------------
+
+
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const startButton = document.getElementById('startButton');
+        const resetButton = document.getElementById('resetButton');
+        const messageBox = document.getElementById('messageBox');
+        const messageTitle = document.getElementById('messageTitle');
+        const messageText = document.getElementById('messageText');
+        const messageButton = document.getElementById('messageButton');
+        const leftButton = document.getElementById('leftButton');
+        const rightButton = document.getElementById('rightButton');
+
+        let animationFrameId;
+        let running = false;
+        let score = 0;
+        let lives = 3;
+
+        // Ball properties (relative to canvas size for responsiveness)
+        let ballRadius;
+        let x, y, dx, dy; // x,y are position, dx, dy are velocity
+
+        // Paddle properties
+        let paddleHeight;
+        let paddleWidth;
+        let paddleX;
+
+        // Brick properties
+        const brickRowCount = 5;
+        const brickColumnCount = 6;
+        let brickWidth, brickHeight, brickPadding, brickOffsetTop, brickOffsetLeft;
+        let bricks = [];
+
+        // Input control
+        let rightPressed = false;
+        let leftPressed = false;
+        let touchMoveDirection = 0; // -1 for left, 1 for right, 0 for none
+
+        // --- GAME LOGIC FUNCTIONS ---
+
+        function initGame() {
+            // Calculate sizes based on current canvas dimensions
+            const aspectRatio = 3 / 2; // Desired ratio
+            canvas.width = canvas.clientWidth;
+            canvas.height = canvas.width / aspectRatio;
+
+            // Define object sizes relative to canvas width
+            ballRadius = canvas.width / 80;
+            paddleHeight = canvas.height / 25;
+            paddleWidth = canvas.width / 6;
+
+            // Reset ball, paddle, and game state
+            x = canvas.width / 2;
+            y = canvas.height - paddleHeight - ballRadius;
+            dx = canvas.width / 200; // Initial speed
+            dy = -canvas.height / 200;
+
+            paddleX = (canvas.width - paddleWidth) / 2;
+            score = 0;
+            lives = 3;
+            running = false;
+            resetButton.disabled = true;
+
+            // Brick Layout
+            brickRowCount = 5;
+            brickColumnCount = 6;
+            brickPadding = canvas.width / 60;
+            brickOffsetTop = canvas.height / 10;
+            brickOffsetLeft = canvas.width / 15;
+            brickWidth = (canvas.width - (2 * brickOffsetLeft) - ((brickColumnCount - 1) * brickPadding)) / brickColumnCount;
+            brickHeight = canvas.height / 25;
+
+
+            // Initialize bricks array
+            bricks = [];
+            for (let c = 0; c < brickColumnCount; c++) {
+                bricks[c] = [];
+                for (let r = 0; r < brickRowCount; r++) {
+                    bricks[c][r] = { x: 0, y: 0, status: 1, color: `hsl(${r * 40}, 100%, 50%)` };
+                }
+            }
+
+            draw();
+        }
+
+        function drawBall() {
+            ctx.beginPath();
+            ctx.arc(x, y, ballRadius, 0, Math.PI * 2);
+            ctx.fillStyle = "#ffffff";
+            ctx.shadowColor = "#ffcc00";
+            ctx.shadowBlur = 10;
+            ctx.fill();
+            ctx.closePath();
+            ctx.shadowBlur = 0; // Reset shadow
+        }
+
+        function drawPaddle() {
+            ctx.beginPath();
+            ctx.rect(paddleX, canvas.height - paddleHeight, paddleWidth, paddleHeight);
+            ctx.fillStyle = "#00ffff"; // Cyan retro paddle
+            ctx.shadowColor = "#00ffff";
+            ctx.shadowBlur = 10;
+            ctx.fill();
+            ctx.closePath();
+            ctx.shadowBlur = 0; // Reset shadow
+        }
+
+        function drawBricks() {
+            for (let c = 0; c < brickColumnCount; c++) {
+                for (let r = 0; r < brickRowCount; r++) {
+                    if (bricks[c][r].status === 1) {
+                        const brickX = (c * (brickWidth + brickPadding)) + brickOffsetLeft;
+                        const brickY = (r * (brickHeight + brickPadding)) + brickOffsetTop;
+                        bricks[c][r].x = brickX;
+                        bricks[c][r].y = brickY;
+                        ctx.beginPath();
+                        ctx.rect(brickX, brickY, brickWidth, brickHeight);
+                        ctx.fillStyle = bricks[c][r].color;
+                        ctx.shadowColor = bricks[c][r].color;
+                        ctx.shadowBlur = 5;
+                        ctx.fill();
+                        ctx.closePath();
+                        ctx.shadowBlur = 0; // Reset shadow
+                    }
+                }
+            }
+        }
+
+        function collisionDetection() {
+            for (let c = 0; c < brickColumnCount; c++) {
+                for (let r = 0; r < brickRowCount; r++) {
+                    const b = bricks[c][r];
+                    if (b.status === 1) {
+                        if (x > b.x && x < b.x + brickWidth && y > b.y && y < b.y + brickHeight) {
+                            dy = -dy;
+                            b.status = 0;
+                            score++;
+                            // Check for Win condition
+                            if (score === brickRowCount * brickColumnCount) {
+                                endGame("WIN");
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        function drawScore() {
+            ctx.font = `${canvas.height / 30}px 'Press Start 2P'`;
+            ctx.fillStyle = "#ffcc00";
+            ctx.textAlign = "left";
+            ctx.fillText(`Score: ${score}`, canvas.width / 50, canvas.height / 20);
+        }
+
+        function drawLives() {
+            ctx.font = `${canvas.height / 30}px 'Press Start 2P'`;
+            ctx.fillStyle = "#ff0000";
+            ctx.textAlign = "right";
+            ctx.fillText(`Lives: ${lives}`, canvas.width - canvas.width / 50, canvas.height / 20);
+        }
+
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height); // Clear the canvas
+            drawBricks();
+            drawBall();
+            drawPaddle();
+            drawScore();
+            drawLives();
+
+            if (!running) {
+                // Draw a simple starting instruction
+                ctx.font = `${canvas.height / 25}px 'Press Start 2P'`;
+                ctx.fillStyle = "#ffcc00";
+                ctx.textAlign = "center";
+                ctx.fillText("Press START", canvas.width / 2, canvas.height / 2);
+                return;
+            }
+
+            // Ball Movement
+            x += dx;
+            y += dy;
+
+            // Ball Collision with Walls
+            if (x + dx > canvas.width - ballRadius || x + dx < ballRadius) {
+                dx = -dx;
+            }
+            if (y + dy < ballRadius) {
+                dy = -dy;
+            } else if (y + dy > canvas.height - ballRadius - paddleHeight) {
+                // Ball hits paddle zone
+                if (x > paddleX && x < paddleX + paddleWidth) {
+                    // Ball hits paddle: reverse direction and adjust angle based on hit location
+                    const relativeIntersectX = (paddleX + (paddleWidth / 2)) - x;
+                    const normalizedRelativeIntersectX = (relativeIntersectX / (paddleWidth / 2));
+                    const bounceAngle = normalizedRelativeIntersectX * (Math.PI / 3); // Max 60 degrees
+                    dx = -Math.sin(bounceAngle) * Math.sqrt(dx * dx + dy * dy);
+                    dy = -Math.cos(bounceAngle) * Math.sqrt(dx * dx + dy * dy);
+
+                } else if (y + dy > canvas.height - ballRadius) {
+                    // Ball missed paddle: game over/lose life
+                    lives--;
+                    if (lives === 0) {
+                        endGame("GAME OVER");
+                    } else {
+                        // Reset ball position
+                        x = canvas.width / 2;
+                        y = canvas.height - paddleHeight - ballRadius;
+                        paddleX = (canvas.width - paddleWidth) / 2;
+                        // Pause until start is pressed
+                        running = false;
+                    }
+                }
+            }
+
+            // Paddle Movement (Keyboard or Touch)
+            const paddleSpeed = canvas.width / 50;
+
+            if (rightPressed || touchMoveDirection === 1) {
+                paddleX += paddleSpeed;
+                if (paddleX + paddleWidth > canvas.width) {
+                    paddleX = canvas.width - paddleWidth;
+                }
+            } else if (leftPressed || touchMoveDirection === -1) {
+                paddleX -= paddleSpeed;
+                if (paddleX < 0) {
+                    paddleX = 0;
+                }
+            }
+
+            collisionDetection();
+
+            animationFrameId = requestAnimationFrame(draw);
+        }
+
+        function startGame() {
+            if (!running) {
+                running = true;
+                resetButton.disabled = false;
+                messageBox.style.display = 'none';
+                // If starting after a loss of life, don't reset everything
+                if (score === 0) {
+                    initGame();
+                    running = true;
+                }
+                draw();
+            }
+        }
+
+        function endGame(status) {
+            cancelAnimationFrame(animationFrameId);
+            running = false;
+            resetButton.disabled = false;
+            
+            if (status === "WIN") {
+                messageTitle.textContent = "LEVEL COMPLETE!";
+                messageText.innerHTML = `You cleared all the bricks! Final Score: ${score}.`;
+                messageButton.textContent = "PLAY AGAIN";
+            } else {
+                messageTitle.textContent = "GAME OVER";
+                messageText.innerHTML = `Your Final Score: ${score}.`;
+                messageButton.textContent = "TRY AGAIN";
+            }
+
+            messageBox.style.display = 'flex';
+        }
+
+        function resetGame() {
+             cancelAnimationFrame(animationFrameId);
+             initGame();
+        }
+
+        // --- EVENT LISTENERS ---
+
+        document.addEventListener("keydown", keyDownHandler, false);
+        document.addEventListener("keyup", keyUpHandler, false);
+        startButton.addEventListener('click', startGame);
+        resetButton.addEventListener('click', resetGame);
+        messageButton.addEventListener('click', () => {
+            messageBox.style.display = 'none';
+            resetGame();
+        });
+
+        // Touch Control Listeners (for mobile)
+        leftButton.addEventListener('touchstart', (e) => { e.preventDefault(); touchMoveDirection = -1; }, false);
+        leftButton.addEventListener('touchend', (e) => { e.preventDefault(); touchMoveDirection = 0; }, false);
+        rightButton.addEventListener('touchstart', (e) => { e.preventDefault(); touchMoveDirection = 1; }, false);
+        rightButton.addEventListener('touchend', (e) => { e.preventDefault(); touchMoveDirection = 0; }, false);
+        
+        // Resize listener to maintain responsiveness
+        window.addEventListener('resize', initGame);
+
+
+        function keyDownHandler(e) {
+            if (e.key === "Right" || e.key === "ArrowRight") {
+                rightPressed = true;
+            } else if (e.key === "Left" || e.key === "ArrowLeft") {
+                leftPressed = true;
+            } else if (e.key === "Enter" && !running) {
+                startGame();
+            }
+        }
+
+        function keyUpHandler(e) {
+            if (e.key === "Right" || e.key === "ArrowRight") {
+                rightPressed = false;
+            } else if (e.key === "Left" || e.key === "ArrowLeft") {
+                leftPressed = false;
+            }
+        }
+
+        // Initialize the game when the window loads
+        window.onload = function () {
+            initGame();
+        }
+
+    </script>
 </body>
 </html>
